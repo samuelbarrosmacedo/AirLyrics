@@ -677,6 +677,18 @@ internal fun createSavedLyricsPage(activity: MainUiHost): View = with(activity) 
         titleAction = selectionAction,
         inlineTitleAction = searchAction
     ))
+    container.addView(TextView(activity).apply {
+        text = "Importar playlist em lote (ZIP)"
+        textSize = 15f
+        gravity = Gravity.CENTER
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        setTextColor(colorAccentText)
+        background = GradientDrawable().apply {
+            cornerRadius = dp(18).toFloat()
+            setColor(colorAccent)
+        }
+        setOnClickListener { openTopNotchImporter() }
+    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     container.addView(searchBar)
     container.addView(loadingHint)
     container.addView(emptyHint)

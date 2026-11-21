@@ -33,6 +33,8 @@ internal abstract class MainUiHost(
     open fun loadSavedLyrics(force: Boolean, deliver: (SavedLyricsUiState) -> Unit) =
         savedLoad.submit(this, { savedLyricsState() }, deliver)
 
+    open fun openTopNotchImporter() = Unit
+
     abstract val readerContent: ReaderContent
     abstract val confirmations: OperationConfirmations
     val auxiliaryDialogs = mutableMapOf<String, android.app.Dialog>()

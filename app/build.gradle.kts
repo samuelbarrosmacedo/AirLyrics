@@ -124,6 +124,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".topnotch"
+            versionNameSuffix = "-TopNotch"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
