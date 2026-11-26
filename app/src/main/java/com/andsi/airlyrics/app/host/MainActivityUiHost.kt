@@ -105,6 +105,10 @@ internal class MainActivityUiHost(
     val batchLyricsSession get() = graph.viewModel.batchLyricsSession(applicationContext)
     var batchObserverInstalled = false
 
+    override fun openTopNotchImporter() {
+        activity.startActivity(android.content.Intent(activity, com.andsi.airlyrics.app.TopNotchBatchImportActivity::class.java))
+    }
+
     override fun exportSavedLyrics(items: List<LocalLyricsUiItem>) {
         if (batchLyricsSession.beginExport(items)) graph.launchers.selectBatchLyricsExportDestination()
     }
