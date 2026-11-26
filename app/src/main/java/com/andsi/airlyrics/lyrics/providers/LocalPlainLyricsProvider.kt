@@ -6,6 +6,7 @@ import com.andsi.airlyrics.lyrics.LyricsProviderResult
 import com.andsi.airlyrics.lyrics.PlainLyricsProvider
 import com.andsi.airlyrics.lyrics.PlainLyricsSearchRequest
 import com.andsi.airlyrics.lyrics.storage.LyricsStorage
+import com.andsi.airlyrics.lyrics.storage.TopNotchTrackLinks
 
 /** Reads plain LRC from the user-selected lyrics directory or the app fallback directory. */
 object LocalPlainLyricsProvider : PlainLyricsProvider {
@@ -18,6 +19,8 @@ object LocalPlainLyricsProvider : PlainLyricsProvider {
             ManualLyricsSelectionStore.read(request.context,
                 SongIdentity(request.title, request.artist, request.album, request.durationMs))
                 ?.let { return@runCatching it.result }
+            // A validated Spotify ID resolves imported recordings even when artist formatting differs.
+            TopNotchTrackLinks.read(request)?.let { return@runCatching it }
             val info = LyricsStorage.getLocalPlainLyricsInfo(request.context, request.title, request.artist, request.durationMs)
             if (info?.plainProvider == "spicy" && info.indexKey.startsWith("spicy:")) {
                 return@runCatching com.andsi.airlyrics.lyrics.storage.SpicyLyricsCache.forContext(request.context)

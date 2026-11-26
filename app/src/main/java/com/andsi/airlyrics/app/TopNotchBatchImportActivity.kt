@@ -15,6 +15,9 @@ import com.andsi.airlyrics.lyrics.importer.BatchLyricsDocument
 import com.andsi.airlyrics.lyrics.importer.BatchLyricsDocumentReader
 import com.andsi.airlyrics.lyrics.importer.LyricsDocumentFormat
 import com.andsi.airlyrics.lyrics.storage.LyricsStorage
+import com.andsi.airlyrics.lyrics.storage.TopNotchTrackLinks
+import com.andsi.airlyrics.core.model.SongIdentity
+import com.andsi.airlyrics.lyrics.BroadcastLyricsChangedPublisher
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -115,7 +118,7 @@ internal class TopNotchBatchImportActivity : AppCompatActivity() {
             result.onSuccess { plan ->
                 pending = plan
                 info.text = "Prévia segura\n\n" +
-                    "Novas letras: ${plan.candidates.size}\n" +
+                    "Novas letras ou vínculos a recuperar: ${plan.candidates.size}\n" +
                     "Já existentes, preservadas: ${plan.alreadyPresent}\n" +
                     "Sem arquivo no pacote: ${plan.withoutFiles}\n" +
                     "Inválidas ou ambíguas: ${plan.rejected.size}\n\n" +
@@ -138,11 +141,18 @@ internal class TopNotchBatchImportActivity : AppCompatActivity() {
                 var savedPlain = 0
                 var savedWord = 0
                 var skipped = 0
+                var linked = 0
                 val errors = mutableListOf<String>()
                 for (t in plan.candidates) {
                     try {
                         // Recheck at commit time: a track may have been saved since preview.
-                        if (hasExisting(t)) { skipped++; continue }
+                        if (hasExisting(t)) {
+                            if (TopNotchTrackLinks.link(applicationContext, t.spotifyId, identity(t))) {
+                                linked++
+                                BroadcastLyricsChangedPublisher(applicationContext).publish(identity(t))
+                            } else skipped++
+                            continue
+                        }
                         if (t.document.words.isNotEmpty()) {
                             val wordSaved = LyricsStorage.saveWordByWordLyrics(
                                 applicationContext, t.title, t.artist, t.durationMs,
@@ -162,33 +172,50 @@ internal class TopNotchBatchImportActivity : AppCompatActivity() {
                                 plainSource = LyricsStorage.SOURCE_WORD_BY_WORD_FALLBACK,
                                 plainProvider = "topnotch", overwrite = false
                             )
+                            if (!LyricsStorage.hasPlainLyrics(applicationContext, t.title, t.artist, t.durationMs)) {
+                                errors += "${t.spotifyId}: falha ao gravar LRC auxiliar"
+                                continue
+                            }
                             savedWord++
+                            if (!TopNotchTrackLinks.link(applicationContext, t.spotifyId, identity(t))) {
+                                errors += "${t.spotifyId}: falha ao vincular ID"
+                            }
+                            BroadcastLyricsChangedPublisher(applicationContext).publish(identity(t))
                         } else {
                             if (LyricsStorage.savePlainLyrics(
                                     applicationContext, t.title, t.artist, t.durationMs,
                                     t.document.plainLrc, album = t.album,
                                     plainSource = LyricsStorage.SOURCE_MANUAL_IMPORT,
                                     plainProvider = "topnotch", overwrite = false
-                                )) savedPlain++ else errors += "${t.spotifyId}: falha ao salvar"
+                                )) {
+                                savedPlain++
+                                if (!TopNotchTrackLinks.link(applicationContext, t.spotifyId, identity(t))) {
+                                    errors += "${t.spotifyId}: falha ao vincular ID"
+                                }
+                                BroadcastLyricsChangedPublisher(applicationContext).publish(identity(t))
+                            } else errors += "${t.spotifyId}: falha ao salvar"
                         }
                     } catch (e: Exception) {
                         errors += "${t.spotifyId}: ${e.javaClass.simpleName}"
                     }
                 }
-                Triple(savedPlain, savedWord, Pair(skipped, errors))
+                Triple(savedPlain, savedWord, Triple(skipped, linked, errors))
             }
             info.text = "Importação concluída\n\n" +
                 "LRC por linha: ${result.first}\n" +
                 "Karaokê por palavra: ${result.second}\n" +
                 "Já presentes, ignoradas: ${plan.alreadyPresent + result.third.first}\n" +
+                "Vínculos de faixas recuperados: ${result.third.second}\n" +
                 "Inválidas: ${plan.rejected.size}\n" +
-                "Falhas de gravação: ${result.third.second.size}\n\n" +
-                result.third.second.take(15).joinToString("\n") +
-                "\n\nSe alguma faixa não aparecer ao tocar, verifique se o nome do artista exibido pelo Spotify corresponde ao do manifesto."
+                "Falhas de gravação: ${result.third.third.size}\n\n" +
+                result.third.third.take(15).joinToString("\n") +
+                "\n\nSe alguma faixa não aparecer, confirme se o Spotify está selecionado na aba Media e se a janela Floating está ativa."
             pending = null
             setBusy(false)
         }
     }
+
+    private fun identity(t: Track) = SongIdentity(t.title, t.artist, t.album, t.durationMs)
 
     private fun hasExisting(t: Track): Boolean =
         LyricsStorage.hasWordByWordLyrics(applicationContext, t.title, t.artist, t.durationMs) ||
@@ -238,7 +265,9 @@ internal class TopNotchBatchImportActivity : AppCompatActivity() {
                 errors += "$id: formato inválido"; continue
             }
             val track = Track(id, title, artist, album, duration, file, parsed)
-            if (hasExisting(track)) { existing++; continue }
+            if (hasExisting(track) && !TopNotchTrackLinks.canRecover(applicationContext, track.spotifyId, identity(track))) {
+                existing++; continue
+            }
             accepted += track
         }
         return Plan(accepted, errors, without, existing)
